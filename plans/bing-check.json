@@ -1,0 +1,11 @@
+{
+  "name": "bing-check",
+  "steps": [
+    {"action": "goto", "url": "https://www.bing.com"},
+    {"action": "wait", "ms": 2500},
+    {"action": "type", "selector": "#sb_form_q", "text": "佛山天气"},
+    {"action": "click", "selector": "#search_icon"},
+    {"action": "wait", "ms": 4000},
+    {"action": "screenshot", "name": "r"}
+  ]
+}

@@ -1,0 +1,33 @@
+# RQ worker with system Chromium, containerized.
+# Uses Debian's packaged chromium (no Playwright CDN download needed) plus the
+# USTC mirrors for pip/apt to keep builds fast on CN networks.
+# Keep in sync with requirements.txt; Playwright drives /usr/bin/chromium
+# through BROWSER_EXECUTABLE.
+FROM python:3.11-slim
+
+# apt: point deb.debian.org / security.debian.org at the USTC mirror
+RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g; s|security.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        chromium \
+        fonts-liberation \
+        fonts-noto-cjk \
+        libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+        libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+        libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
+        libx11-xcb1 libxcursor1 libxi6 libxtst6 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+        -i https://mirrors.ustc.edu.cn/pypi/simple/
+
+COPY . .
+
+ENV PYTHONUNBUFFERED=1 \
+    BROWSER_FORCE_HEADLESS=1 \
+    BROWSER_EXECUTABLE=/usr/bin/chromium
+
+CMD ["python", "-m", "worker"]

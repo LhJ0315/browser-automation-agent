@@ -1,0 +1,85 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: browser
+      POSTGRES_PASSWORD: browser
+      POSTGRES_DB: browser_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U browser -d browser_agent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  # Containerized RQ worker: Chromium runs inside this container (isolated),
+  # writing run artifacts to ./runs and tasks to ./data (bind-mounted), which
+  # the host-side API/CLI read from the same paths.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    command: ["python", "-m", "worker.autoscale"]
+    # 读 .env（DOUBAO_API_KEY / DOUBAO_MODEL 供 agent loop 调 LLM）
+    env_file:
+      - .env
+    # 国内公共 DNS（阿里 + 腾讯），加快容器内域名解析
+    dns:
+      - "223.5.5.5"
+      - "119.29.29.29"
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      RQ_QUEUE: browser_tasks
+      MAX_TASK_SECONDS: 900
+      MAX_BROWSER_WORKERS: 1
+      RUNS_ROOT: /app/runs
+      DATA_ROOT: /app/data
+      TASK_STORE: file
+      ARTIFACT_STORE: local
+      BROWSER_FORCE_HEADLESS: "1"
+      BROWSER_ALLOWED_HOSTS: "example.com,www.example.com,httpbin.org,www.baidu.com,baidu.com,www.bing.com,bing.com,wx.qq.com,weixin.qq.com"
+      # 本地自用：放行所有站点，不再逐域名加白名单
+      BROWSER_ALLOW_ALL_HOSTS: "1"
+      WORKER_MIN: "1"
+      WORKER_MAX: "3"
+      SCALE_UP_THRESHOLD: "1"
+      AUTOSCALE_POLL_SECONDS: "5"
+      # Optional: Postgres task/auth backend + webhook callbacks (container-internal names)
+      # DATABASE_URL: postgresql+psycopg://browser:browser@postgres:5432/browser_agent
+      # SECRET_KEY: change-me
+      # WEBHOOK_URL: https://example.com/hooks/browser-agent
+      # WEBHOOK_SECRET: change-me
+    volumes:
+      - ./runs:/app/runs
+      - ./data:/app/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  miniodata:

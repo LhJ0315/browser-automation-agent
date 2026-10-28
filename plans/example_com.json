@@ -1,0 +1,12 @@
+{
+  "name": "example-com-basic",
+  "description": "Open example.com, screenshot, extract title and h1",
+  "steps": [
+    {"action": "goto", "url": "https://example.com/"},
+    {"action": "wait", "ms": 500},
+    {"action": "screenshot", "name": "home"},
+    {"action": "extract", "field": "title"},
+    {"action": "extract", "field": "text", "selector": "h1"},
+    {"action": "screenshot", "name": "home-full", "full_page": true}
+  ]
+}

@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>浏览器自动化控制台（本地）</title>
+<style>
+  :root {
+    --bg: #f1f5f9;
+    --panel: #ffffff;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --accent: #0d9488;
+    --accent-ink: #ffffff;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --bad: #dc2626;
+    --info: #2563eb;
+    --radius: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+      "PingFang SC", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); }
+  body { min-width: 1080px; }
+
+  /* layout */
+  .shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+  .side {
+    background: #0f172a; color: #cbd5e1; padding: 20px 14px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .brand { font-size: 15px; font-weight: 700; color: #f8fafc; padding: 6px 10px 18px; }
+  .brand small { display: block; font-size: 11px; font-weight: 400; color: #64748b; margin-top: 3px; }
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav a {
+    color: #94a3b8; text-decoration: none; padding: 9px 12px; border-radius: 8px;
+    font-size: 14px; display: flex; gap: 10px; align-items: center;
+  }
+  .nav a:hover { background: #1e293b; color: #e2e8f0; }
+  .nav a.active { background: var(--accent); color: #fff; }
+  .side .foot { margin-top: auto; font-size: 11px; color: #64748b; padding: 10px; line-height: 1.6; }
+
+  .main { padding: 22px 28px; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .topbar h1 { font-size: 19px; margin: 0; font-weight: 700; }
+  .topbar .spacer { flex: 1; }
+  .conn { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+  .dot.ok { background: var(--ok); }
+  .dot.warn { background: var(--warn); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 12px; font-weight: 700; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  button, input, select, textarea {
+    font: inherit; color: var(--ink);
+  }
+  .btn {
+    border: 1px solid var(--line); background: #fff; padding: 8px 14px; border-radius: 8px;
+    cursor: pointer; font-size: 13px;
+  }
+  .btn:hover { background: #f8fafc; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.danger { color: var(--bad); border-color: #fecaca; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+
+  label.f { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+  input[type=text], input[type=number], select, textarea {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #fff;
+  }
+  input:focus, textarea:focus, select:focus { outline: 2px solid rgba(13,148,136,.25); border-color: var(--accent); }
+  textarea { font-family: ui-monospace, Consolas, monospace; font-size: 12px; resize: vertical; }
+  .req { color: var(--bad); }
+
+  /* tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tabs button { border: none; background: transparent; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--muted); }
+  .tabs button.active { background: #ecfdf5; color: var(--accent); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #f8fafc; }
+
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .b-queued { background: #f1f5f9; color: #475569; }
+  .b-pending { background: #f1f5f9; color: #475569; }
+  .b-running { background: #dbeafe; color: var(--info); }
+  .b-succeeded { background: #dcfce7; color: var(--ok); }
+  .b-failed { background: #fee2e2; color: var(--bad); }
+  .b-cancelled { background: #f1f5f9; color: #94a3b8; }
+
+  .muted { color: var(--muted); font-size: 12px; }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+  /* detail */
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 14px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  .report { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 8px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .shot { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; cursor: zoom-in; background: #f8fafc; }
+  .shot img { width: 100%; display: block; }
+  .shot .cap { font-size: 11px; color: var(--muted); padding: 6px 8px; }
+
+  /* modal */
+  .mask { position: fixed; inset: 0; background: rgba(15,23,42,.5); display: flex; align-items: flex-start; justify-content: center; padding: 60px 20px; z-index: 50; }
+  .modal { background: #fff; border-radius: 12px; width: 560px; max-width: 100%; padding: 20px 22px; }
+  .modal h3 { margin: 0 0 14px; font-size: 16px; }
+  .modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+  .err { color: var(--bad); font-size: 12px; margin-top: 8px; }
+
+  .lightbox { position: fixed; inset: 0; background: rgba(15,23,42,.85); display: flex; align-items: center; justify-content: center; z-index: 100; cursor: zoom-out; padding: 30px; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 13px; z-index: 200; }
+  .toast.bad { background: var(--bad); }
+  .hidden { display: none !important; }
+
+  /* agent trajectory timeline */
+  .timeline { display: flex; flex-direction: column; gap: 8px; }
+  .tl-item { border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 8px; padding: 8px 12px; background: #fff; }
+  .tl-item.ok { border-left-color: var(--ok); }
+  .tl-item.bad { border-left-color: var(--bad); background: #fef2f2; }
+  .tl-head { display: flex; gap: 10px; align-items: center; font-size: 13px; }
+  .tl-idx { font-family: ui-monospace, Consolas, monospace; color: var(--muted); font-size: 12px; }
+  .tl-act { font-weight: 600; font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: #f1f5f9; padding: 2px 8px; border-radius: 999px; }
+  .tl-state { margin-left: auto; font-weight: 700; }
+  .tl-item.ok .tl-state { color: var(--ok); }
+  .tl-item.bad .tl-state { color: var(--bad); }
+  .tl-thought { font-size: 12px; color: var(--ink); margin-top: 5px; line-height: 1.5; }
+  .tl-result { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .tl-err { font-size: 12px; color: var(--bad); margin-top: 3px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand">浏览器自动化控制台<small>本地直连 · file/JSON 后端</small></div>
+    <nav class="nav">
+      <a href="#/tasks" data-nav="tasks">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+        任务
+      </a>
+      <a href="#/templates" data-nav="templates">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v4H4zM4 10h16v4H4zM4 16h10v4H4z"/></svg>
+        模板
+      </a>
+    </nav>
+    <div class="foot">
+      数据存本地文件库<br>
+      worker 在容器内执行<br>
+      产物：runs/&lt;run_id&gt;/
+    </div>
+  </aside>
+
+  <main class="main" id="main">
+    <div class="topbar">
+      <h1 id="page-title">任务</h1>
+      <div class="spacer"></div>
+      <div class="conn">
+        <span class="dot" id="conn-dot"></span>
+        <span id="conn-text">连接中…</span>
+      </div>
+      <button class="btn small" id="btn-api" title="修改 API 地址">API</button>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<div class="mask hidden" id="modal-mask">
+  <div class="modal" id="modal"></div>
+</div>
+<div class="lightbox hidden" id="lightbox"><img id="lightbox-img" alt=""></div>
+
+<script>
+/* ============ 基础 ============ */
+const $ = (sel, root=document) => root.querySelector(sel);
+const apiBase = () => localStorage.getItem('apiBase') || 'http://127.0.0.1:8001';
+
+async function api(path, opts={}) {
+  const res = await fetch(apiBase() + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  let data = null;
+  const text = await res.text();
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+  if (!res.ok) {
+    const detail = (data && data.detail) ? JSON.stringify(data.detail) : res.status;
+    throw new Error('HTTP ' + res.status + ': ' + detail);
+  }
+  return data;
+}
+function toast(msg, bad=false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2600);
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtTime(s) { return s ? s.replace('T',' ').replace('Z','') : '-'; }
+function badge(status) { return `<span class="badge b-${esc(status)}">${esc(status)}</span>`; }
+
+/* markdown 极简渲染 */
+function md(text) {
+  if (!text) return '';
+  const lines = esc(text).split('\n');
+  let html = '', inCode = false;
+  for (const ln of lines) {
+    if (ln.startsWith('```')) { inCode = !inCode; html += inCode ? '<div class="report">' : '</div>'; continue; }
+    if (inCode) { html += ln + '\n'; continue; }
+    let t = ln
+      .replace(/^### (.*)$/,'<h4>$1</h4>')
+      .replace(/^## (.*)$/,'<h3>$1</h3>')
+      .replace(/^# (.*)$/,'<h3>$1</h3>')
+      .replace(/^- (.*)$/,'<div>• $1</div>')
+      .replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')
+      .replace(/`([^`]+)`/g,'<code>$1</code>');
+    if (/^\d+\. /.test(ln)) t = '<div>' + t + '</div>';
+    html += t + (t.startsWith('<') ? '' : '<br>');
+  }
+  return html;
+}
+
+/* ============ 健康连接状态 ============ */
+async function checkConn() {
+  const dot = $('#conn-dot'), txt = $('#conn-text');
+  try {
+    const h = await api('/health');
+    dot.className = 'dot ok';
+    txt.textContent = apiBase() + (h.redis ? '' : '（Redis 断）');
+  } catch (e) {
+    dot.className = 'dot bad';
+    txt.textContent = apiBase() + ' 不可达';
+  }
+}
+$('#btn-api').onclick = () => {
+  const v = prompt('API 地址：', apiBase());
+  if (v) { localStorage.setItem('apiBase', v.replace(/\/$/,'')); checkConn(); route(); }
+};
+
+/* ============ 视图：任务列表 ============ */
+async function viewTasks() {
+  $('#page-title').textContent = '任务';
+  const v = $('#view');
+  v.innerHTML = `
+    <div class="card">
+      <h2>新建任务</h2>
+      <div class="tabs" id="tabs">
+        <button data-mode="demo" class="active">内置示例</button>
+        <button data-mode="nl">自然语言</button>
+        <button data-mode="plan">JSON 计划</button>
+        <button data-mode="agent">Agent 闭环</button>
+      </div>
+      <div id="mode-demo"><div class="muted">跑内置的示例计划（打开 example.com 等演示站点）。</div></div>
+      <div id="mode-nl" class="hidden">
+        <label class="f">任务描述
+          <textarea id="nl-text" rows="3" placeholder="打开 https://www.bing.com，提取标题"></textarea>
+        </label>
+      </div>
+      <div id="mode-plan" class="hidden">
+        <label class="f">JSON 计划（{ "name": "...", "steps": [...] }）
+          <textarea id="plan-text" rows="7" placeholder='{"name":"p","steps":[{"action":"goto","url":"https://www.bing.com"}]}'></textarea>
+        </label>
+      </div>
+      <div id="mode-agent" class="hidden">
+        <label class="f">目标（agent 会自己观察页面、决定下一步动作，直到它认为完成）
+          <textarea id="agent-text" rows="3" placeholder="打开 https://www.bing.com，搜索 佛山天气 并告诉我当前温度"></textarea>
+        </label>
+        <div class="muted" style="margin-top:6px">需要 DOUBAO_API_KEY + DOUBAO_MODEL；每步都会截图留痕。</div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label class="f">headed <input type="checkbox" id="opt-headed"></label>
+        <label class="f">max_replans
+          <select id="opt-replans"><option>0</option><option>1</option><option>2</option></select>
+        </label>
+        <button class="btn primary" id="btn-run" style="margin-left:auto">提交任务</button>
+      </div>
+      <div class="err hidden" id="run-err"></div>
+    </div>
+    <div class="card">
+      <h2>任务列表
+        <select id="src-filter" style="margin-left:8px;font-size:13px">
+          <option value="">全部来源</option>
+          <option value="agent">agent</option>
+          <option value="task_nl">task_nl</option>
+          <option value="json_plan">json_plan</option>
+          <option value="template">template</option>
+          <option value="demo">demo</option>
+        </select>
+        <button class="btn small" id="btn-refresh" style="margin-left:8px">刷新</button>
+      </h2>
+      <div id="task-list">加载中…</div>
+    </div>`;
+
+  v.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+    v.querySelectorAll('#tabs button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    ['demo','nl','plan','agent'].forEach(m => $('#mode-'+m).classList.toggle('hidden', m !== b.dataset.mode));
+  });
+
+  $('#btn-run').onclick = async () => {
+    const mode = v.querySelector('#tabs button.active').dataset.mode;
+    const body = {
+      headed: $('#opt-headed').checked,
+      max_replans: parseInt($('#opt-replans').value || '0', 10),
+    };
+    if (mode === 'demo') body.demo = true;
+    else if (mode === 'nl') {
+      const t = $('#nl-text').value.trim();
+      if (!t) return showErr('请输入任务描述');
+      body.task_nl = t;
+    } else if (mode === 'agent') {
+      const t = $('#agent-text').value.trim();
+      if (!t) return showErr('请输入目标');
+      body.agent = true;
+      body.task_nl = t;
+    } else {
+      try { body.json_plan = JSON.parse($('#plan-text').value); }
+      catch (e) { return showErr('JSON 解析失败：' + e.message); }
+    }
+    try {
+      const r = await api('/api/v1/tasks', { method:'POST', body: JSON.stringify(body) });
+      toast('任务已创建：' + r.task_id);
+      location.hash = '#/tasks/' + r.task_id;
+    } catch (e) { showErr(e.message); }
+  };
+  function showErr(msg) { const el=$('#run-err'); el.textContent=msg; el.classList.remove('hidden'); }
+  $('#btn-refresh').onclick = loadTasks;
+  const sf = $('#src-filter');
+  if (sf) sf.onchange = loadTasks;
+  loadTasks();
+}
+
+async function loadTasks() {
+  try {
+    const tasks = await api('/api/v1/tasks?limit=50');
+    const filter = ($('#src-filter')?.value) || '';
+    const filtered = filter ? tasks.filter(t => t.source === filter) : tasks;
+    if (!filtered.length) { $('#task-list').innerHTML = '<div class="muted">无任务</div>'; return; }
+    $('#task-list').innerHTML = `<table>
+      <thead><tr><th>任务</th><th>状态</th><th>来源</th><th>摘要</th><th>更新时间</th></tr></thead>
+      <tbody>${filtered.map(t => `<tr class="clickable" data-id="${esc(t.task_id)}">
+        <td class="mono">${esc(t.task_id.slice(0,8))}…</td>
+        <td>${badge(t.status)}</td>
+        <td class="muted">${esc(t.source)}</td>
+        <td class="muted">${esc((t.summary||'').slice(0,60))}</td>
+        <td class="muted">${fmtTime(t.updated_at)}</td>
+      </tr>`).join('')}</tbody></table>`;
+    $('#task-list').querySelectorAll('tr.clickable').forEach(tr => {
+      tr.onclick = () => location.hash = '#/tasks/' + tr.dataset.id;
+    });
+  } catch (e) { $('#task-list').innerHTML = '<div class="err">加载失败：' + esc(e.message) + '</div>'; }
+}
+
+/* ============ 视图：任务详情 ============ */
+let pollTimer = null;
+async function viewTaskDetail(id) {
+  $('#page-title').textContent = '任务详情';
+  $('#view').innerHTML = '<div class="card">加载中…</div>';
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+
+  async function render() {
+    let t;
+    try { t = await api('/api/v1/tasks/' + id); }
+    catch (e) { $('#view').innerHTML = '<div class="card err">加载失败：' + esc(e.message) + '</div>'; return; }
+
+    const terminal = ['succeeded','failed','cancelled'].includes(t.status);
+    $('#view').innerHTML = `
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h2 style="margin:0">任务 ${badge(t.status)}</h2>
+          <div class="row">
+            <button class="btn small" id="btn-cancel" ${terminal?'disabled':''}>取消任务</button>
+            <button class="btn small" onclick="history.back()">返回列表</button>
+          </div>
+        </div>
+        <dl class="kv" style="margin-top:14px">
+          <dt>任务 ID</dt><dd class="mono">${esc(t.task_id)}</dd>
+          <dt>来源</dt><dd>${esc(t.source)}</dd>
+          <dt>Run ID</dt><dd class="mono">${esc(t.run_id||'-')}</dd>
+          <dt>创建</dt><dd>${fmtTime(t.created_at)}</dd>
+          <dt>开始/完成</dt><dd>${fmtTime(t.started_at)} / ${fmtTime(t.finished_at)}</dd>
+          <dt>摘要</dt><dd>${esc(t.summary||'-')}</dd>
+          ${t.error ? `<dt>错误</dt><dd style="color:var(--bad)">${esc(t.error)}</dd>` : ''}
+          ${t.task_nl ? `<dt>任务描述</dt><dd>${esc(t.task_nl)}</dd>` : ''}
+        </dl>
+      </div>
+      <div class="card"><h2>报告</h2><div id="report">加载中…</div></div>
+      <div class="card hidden" id="trajectory-card"><h2>Agent 轨迹</h2><div id="trajectory" class="timeline"></div></div>
+      <div class="card"><h2>截图</h2><div id="shots" class="shots">加载中…</div></div>`;
+
+    $('#btn-cancel').onclick = async () => {
+      try { await api('/api/v1/tasks/'+id+'/cancel', { method:'POST' }); toast('已请求取消'); render(); }
+      catch (e) { toast('取消失败：'+e.message, true); }
+    };
+
+    // report
+    if (!terminal) { $('#report').textContent = '任务运行中，报告完成后可见…'; }
+    else {
+      try {
+        const res = await fetch(apiBase() + '/api/v1/tasks/' + id + '/report');
+        if (!res.ok) $('#report').textContent = '报告不可用（HTTP ' + res.status + '）';
+        else $('#report').innerHTML = md(await res.text());
+      } catch (e) { $('#report').textContent = '报告加载失败：' + e.message; }
+    }
+
+    // screenshots
+    try {
+      const shots = await api('/api/v1/tasks/' + id + '/screenshots');
+      if (!shots.length) $('#shots').innerHTML = '<div class="muted">无截图</div>';
+      else $('#shots').innerHTML = shots.map(s => `
+        <div class="shot" data-name="${esc(s.name)}">
+          <img src="${apiBase()}/api/v1/tasks/${esc(id)}/screenshots/${encodeURIComponent(s.name)}" alt="${esc(s.name)}" loading="lazy">
+          <div class="cap">${esc(s.name)}</div>
+        </div>`).join('');
+      $('#shots').querySelectorAll('.shot').forEach(el => el.onclick = () => {
+        $('#lightbox-img').src = el.querySelector('img').src;
+        $('#lightbox').classList.remove('hidden');
+      });
+    } catch (e) { $('#shots').innerHTML = '<div class="muted">截图加载失败：' + esc(e.message) + '</div>'; }
+
+    // agent trajectory (if this run has a meta.json with steps)
+    try {
+      const st = await api('/api/v1/tasks/' + id + '/steps');
+      const card = $('#trajectory-card');
+      if (!st.steps || !st.steps.length) { card.classList.add('hidden'); }
+      else {
+        card.classList.remove('hidden');
+        $('#trajectory').innerHTML = st.steps.map(renderStep).join('');
+      }
+    } catch (e) { /* not an agent run */ }
+
+    if (!terminal) {
+      // SSE live stream: append steps as they arrive, re-render on status change
+      const es = new EventSource(apiBase() + '/api/v1/tasks/' + id + '/stream');
+      window.__es = es;
+      es.addEventListener('step', ev => {
+        try {
+          const s = JSON.parse(ev.data);
+          const card = $('#trajectory-card');
+          if (card.classList.contains('hidden')) {
+            card.classList.remove('hidden');
+            $('#trajectory').innerHTML = '';
+          }
+          $('#trajectory').insertAdjacentHTML('beforeend', renderStep(s));
+        } catch (e) {}
+      });
+      es.addEventListener('status', () => render());
+      es.addEventListener('done', ev => {
+        es.close();
+        render();
+      });
+      es.onerror = () => {
+        // fall back to polling if SSE fails (e.g. proxy)
+        if (es.readyState === EventSource.CLOSED) {
+          pollTimer = setTimeout(render, 2500);
+        }
+      };
+    }
+  }
+  function renderStep(s) {
+    const okCls = s.ok ? 'ok' : 'bad';
+    const [thought, result] = (s.message || '').split(' | ');
+    return `<div class="tl-item ${okCls}">
+      <div class="tl-head">
+        <span class="tl-idx">#${(s.index+1)}</span>
+        <span class="tl-act">${esc(s.action)}</span>
+        <span class="tl-state">${s.ok ? '✓' : '✗'}</span>
+      </div>
+      ${thought ? `<div class="tl-thought">${esc(thought)}</div>` : ''}
+      ${result ? `<div class="tl-result">${esc(result)}</div>` : ''}
+      ${s.error ? `<div class="tl-err">${esc(s.error)}</div>` : ''}
+    </div>`;
+  }
+  render();
+}
+$('#lightbox').onclick = () => $('#lightbox').classList.add('hidden');
+
+/* ============ 视图：模板 ============ */
+async function viewTemplates() {
+  $('#page-title').textContent = '模板';
+  $('#view').innerHTML = `<div class="card">
+    <h2>模板列表 <button class="btn small" id="btn-refresh-t" style="margin-left:8px">刷新</button></h2>
+    <div id="tpl-list">加载中…</div>
+  </div>`;
+  async function load() {
+    try {
+      const tpls = await api('/api/v1/templates');
+      if (!tpls.length) { $('#tpl-list').innerHTML = '<div class="muted">暂无模板。</div>'; return; }
+      $('#tpl-list').innerHTML = `<table>
+        <thead><tr><th>名称</th><th>描述</th><th>步骤</th><th>变量</th><th></th></tr></thead>
+        <tbody>${tpls.map(t => `<tr>
+          <td class="mono"><b>${esc(t.name)}</b></td>
+          <td class="muted">${esc(t.description)}</td>
+          <td class="muted">${t.step_count}</td>
+          <td class="muted">${t.variable_count}</td>
+          <td><button class="btn small primary" data-run="${esc(t.name)}">运行</button></td>
+        </tr>`).join('')}</tbody></table>`;
+      $('#tpl-list').querySelectorAll('[data-run]').forEach(b => b.onclick = () => openRun(b.dataset.run));
+    } catch (e) { $('#tpl-list').innerHTML = '<div class="err">加载失败：' + esc(e.message) + '</div>'; }
+  }
+  $('#btn-refresh-t').onclick = load;
+  load();
+}
+
+async function openRun(name) {
+  let tpl;
+  try { tpl = await api('/api/v1/templates/' + encodeURIComponent(name)); }
+  catch (e) { toast('读取模板失败：' + e.message, true); return; }
+  const vars = tpl.variables || {};
+  const varNames = Object.keys(vars);
+
+  const modal = $('#modal');
+  modal.innerHTML = `
+    <h3>运行模板：${esc(tpl.name)}</h3>
+    <div class="row" style="flex-direction:column;gap:10px">
+      ${varNames.length ? varNames.map(n => `
+        <label class="f">${esc(n)}${(vars[n] === '' || vars[n] == null) ? ' <span class="req">（必填）</span>' : ''}
+          <input type="text" data-var="${esc(n)}" value="${esc(vars[n] ?? '')}" placeholder="${esc(vars[n] ?? '')}">
+        </label>`).join('') : '<div class="muted">该模板无参数。</div>'}
+      <label class="f">headed（显示浏览器窗口）<input type="checkbox" id="r-headed"></label>
+      <label class="f">max_replans
+        <select id="r-replans"><option>0</option><option>1</option><option>2</option></select>
+      </label>
+    </div>
+    <div class="err hidden" id="r-err"></div>
+    <div class="actions">
+      <button class="btn" id="r-cancel">取消</button>
+      <button class="btn primary" id="r-go">创建任务并运行</button>
+    </div>`;
+  $('#modal-mask').classList.remove('hidden');
+  $('#r-cancel').onclick = closeModal;
+  $('#modal-mask').onclick = (e) => { if (e.target.id === 'modal-mask') closeModal(); };
+
+  $('#r-go').onclick = async () => {
+    const body = { variables: {}, headed: $('#r-headed').checked, max_replans: parseInt($('#r-replans').value,10) };
+    for (const n of varNames) {
+      const inp = modal.querySelector(`[data-var="${CSS.escape(n)}"]`);
+      body.variables[n] = inp.value;
+    }
+    try {
+      const r = await api('/api/v1/templates/' + encodeURIComponent(name) + '/run',
+        { method:'POST', body: JSON.stringify(body) });
+      closeModal();
+      toast('任务已创建');
+      location.hash = '#/tasks/' + r.task_id;
+    } catch (e) {
+      const el = $('#r-err'); el.textContent = e.message; el.classList.remove('hidden');
+    }
+  };
+}
+function closeModal() { $('#modal-mask').classList.add('hidden'); }
+
+/* ============ 路由 ============ */
+function route() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  if (window.__es) { window.__es.close(); window.__es = null; }
+  const hash = location.hash || '#/tasks';
+  document.querySelectorAll('.nav a').forEach(a => a.classList.toggle('active', hash.includes(a.dataset.nav)));
+  const m = hash.match(/^#\/tasks\/(.+)$/);
+  if (m) viewTaskDetail(m[1]);
+  else if (hash.startsWith('#/templates')) viewTemplates();
+  else viewTasks();
+}
+window.addEventListener('hashchange', route);
+checkConn();
+route();
+</script>
+</body>
+</html>

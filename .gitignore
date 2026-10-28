@@ -1,0 +1,20 @@
+.env
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 运行产物与本地数据
+runs/
+data/
+*.sqlite
+.preview/
+_p1_evidence/
+
+# 临时草稿与本地生成物
+memoized-napping-wreath.md
+_run_agent.py
+_vision_models.png
+project_tree.txt
+docs/*.docx
