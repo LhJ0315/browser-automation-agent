@@ -75,6 +75,7 @@ def execute_task(task_id: str) -> dict[str, Any]:
         headed=bool(rec.headed),
         max_replans=int(rec.max_replans or 0),
         cancel_check=lambda: store.is_cancel_requested(task_id),
+        on_run_start=lambda run_id: store.update(task_id, run_id=run_id),
         meta_extra={"task_id": task_id},
     )
 

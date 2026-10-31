@@ -127,9 +127,12 @@ def create_task(
     require_can_write(principal)
     store = _store()
     task_id = str(uuid.uuid4())
+    # enqueue_task reuses task_id as the RQ job id; persist it before enqueue so
+    # the worker's "running" update cannot be overwritten by a late queued write.
     rec = TaskRecord(
         task_id=task_id,
-        status="pending",
+        status="queued",
+        rq_job_id=task_id,
         source=_source_of(body),
         task_nl=body.task_nl,
         json_plan=body.json_plan,
@@ -153,7 +156,6 @@ def create_task(
         )
         raise HTTPException(status_code=503, detail=f"failed to enqueue task: {exc}") from exc
 
-    store.update(task_id, status="queued", rq_job_id=job_id)
     return TaskCreateResponse(task_id=task_id, status="queued", rq_job_id=job_id)
 
 

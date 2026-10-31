@@ -31,6 +31,12 @@ flowchart LR
     W --> H[Webhook<br/>HMAC-SHA256]
 ```
 
+## 演示
+
+![Agent 轨迹：4 步完成并给出页面证据](docs/demo-live-trace.png)
+
+本地库存页上的一次真实运行：`goto → type → click → done`，4 步完成。`done` 返回的 `summary`（¥399 / 库存 12）与页面原文 `evidence` 一致，逐步截图、报告和 run 元数据一并归档。复现方式见[本地可复现演示](#本地可复现演示)。
+
 ## 快速开始（本机运行）
 
 ```powershell
@@ -75,7 +81,7 @@ $r = Invoke-RestMethod -Method POST http://127.0.0.1:8000/api/v1/tasks `
 Invoke-RestMethod "http://127.0.0.1:8000/api/v1/tasks/$($r.task_id)"
 ```
 
-本地 Web 控制台：直接用浏览器打开 `web-console/index.html`（单文件，无需构建），支持新建任务、Agent 轨迹时间线与 SSE 实时刷新。
+本地 Web 控制台：直接用浏览器打开 `web-console/index.html`（单文件，无需构建），默认连接 `http://127.0.0.1:8000`（右上角 API 按钮可改），支持新建任务、Agent 轨迹时间线与 SSE 实时刷新。
 
 > Windows 提示：`REDIS_URL` 建议写 `127.0.0.1` 而不是 `localhost`，避免解析到 IPv6 `::1` 造成连接挂起。
 
@@ -192,10 +198,30 @@ $r = Invoke-RestMethod -Method POST http://127.0.0.1:8000/api/v1/tasks -ContentT
 可靠性设计：
 
 - 硬上限 18 步；`goto` 仍走主机白名单
-- LLM 决策失败（超时 / 坏 JSON）先重试一次（间隔 2s）再判失败；JSON 解析会剥离 code fence、截取最外层对象并去尾逗号
-- `done=true` 必须同时返回 `summary`（含数字与单位）和页面原文 `evidence`；evidence 未出现在最新观察文本、不含数字或短于 4 字符时拒绝完成并继续循环（轨迹中记为 `(done rejected)`）
+- LLM 决策失败（超时 / 坏 JSON）先重试一次（间隔 2s）再判失败；JSON 解析会剥离 code fence、截取最外层对象、去尾逗号，并容错从表格复制出的裸控制字符
+- `done=true` 必须同时返回 `summary` 和页面原文 `evidence`；evidence 未出现在最新观察文本、不含数字或短于 4 字符时拒绝完成并继续循环（轨迹中记为 `(done rejected)`），随后再由一次 LLM 自检核对 summary 与页面文本
 - 观察脚本穿透开放 shadow root，并合并同源 iframe 的元素列表
 - 队列作业带 `Retry(max=1, interval=5)`，worker 崩溃或超时后自动重入队
+
+### 本地可复现演示
+
+```powershell
+# 终端 0 — 演示站点（搜索框 + 库存表格）
+python -m http.server 8099 --directory examples/demo-site
+
+# 终端 1 — API
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+
+# 终端 2 — worker（goto 在 worker 内执行，需放开主机白名单）
+$env:BROWSER_ALLOW_ALL_HOSTS="1"
+$env:DOUBAO_MODEL="doubao-seed-2-1-lite-260915"
+python -m worker
+```
+
+打开 `web-console/index.html`，切到「Agent 闭环」，输入：
+`打开 http://127.0.0.1:8099/ ，在搜索框输入 机械键盘 并点击搜索，然后告诉我该商品的价格和库存`
+
+预期 4 步（goto → type → click → done），通常 30–45 秒（实测 31–41 秒）；完成后控制台展示逐步截图、`summary` 与页面原文 `evidence`，产物在 `runs/<run_id>/`。想从空任务列表开始，可给 API 与 worker 同时设置 `DATA_ROOT` / `RUNS_ROOT` 指向临时目录。
 
 ## 容器化 worker 与自动扩缩
 
@@ -236,7 +262,7 @@ python -m scripts.migrate_tasks              # 导入
 python -m pytest tests -q
 ```
 
-78 个用例，默认全程离线：单元测试不启动 Chromium，也不需要 Redis / Postgres（队列调用被替换，Postgres 相关用例在无库时自动跳过）。真实浏览器冒烟请用 CLI `--demo` 或 POST `{"demo": true}`。
+82 个用例（78 通过 + 4 跳过），默认全程离线：单元测试不启动 Chromium，也不需要 Redis / Postgres（队列调用被替换，Postgres 相关用例在无库时自动跳过）。真实浏览器冒烟请用 CLI `--demo` 或 POST `{"demo": true}`。
 
 ## 项目结构
 
@@ -248,6 +274,7 @@ browser-automation-agent/
 ├── store/              # TaskStore（file / Postgres）+ ArtifactStore（local / S3）+ TemplateStore
 ├── alembic/            # 数据库迁移
 ├── plans/              # 示例计划 JSON
+├── examples/           # 本地演示站点（库存搜索页）
 ├── scripts/            # run_task / auth_cli / migrate_tasks / start-redis-wsl
 ├── web-console/        # 单文件本地 Web 控制台
 ├── docs/               # 部署文档

@@ -230,6 +230,40 @@ def test_execute_task_fires_webhook_on_terminal(settings, store, monkeypatch):
     assert store.get("wh-run").status == "succeeded"
 
 
+def test_execute_task_exposes_run_id_while_running(settings, store, monkeypatch):
+    from browser_agent.service import RunResult
+
+    seen: dict[str, object] = {}
+
+    def fake_run_plan(req):
+        req.on_run_start("run-early")
+        rec = store.get("wh-early")
+        seen["run_id"] = rec.run_id
+        seen["status"] = rec.status
+        return RunResult(
+            run_id="run-early",
+            run_dir=settings.runs_root / "run-early",
+            success=True,
+            cancelled=False,
+            summary="ok",
+            plan={"name": "p", "steps": []},
+            report_path=None,
+            screenshot_paths=[],
+            run_ids=["run-early"],
+        )
+
+    monkeypatch.setattr("worker.jobs.run_plan", fake_run_plan)
+    monkeypatch.setattr(
+        "worker.webhook.notify_task_terminal",
+        lambda rec: {"sent": True},
+    )
+    store.create(_rec(status="queued", task_id="wh-early", created_at="", updated_at=""))
+
+    result = execute_task("wh-early")
+    assert seen == {"run_id": "run-early", "status": "running"}
+    assert result["status"] == "succeeded"
+
+
 def test_execute_task_failure_still_fires_webhook(settings, store, monkeypatch):
     def boom(req):
         raise RuntimeError("kaboom")

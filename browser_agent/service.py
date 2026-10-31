@@ -32,6 +32,7 @@ class RunRequest:
     allow_all_hosts: bool = False
     max_replans: int = 0
     cancel_check: Callable[[], bool] | None = None
+    on_run_start: Callable[[str], None] | None = None
     browser_factory: Any | None = None
     meta_extra: dict[str, Any] | None = None
     variables: dict[str, str] | None = None
@@ -136,6 +137,8 @@ def run_plan(req: RunRequest) -> RunResult:
         if req.meta_extra:
             meta.update(req.meta_extra)
         archive = create_archive(output_root, placeholder, run_id=base_run_id, meta=meta)
+        if req.on_run_start:
+            req.on_run_start(archive.run_id)
         run_agent_loop(
             goal, archive, safety=safety, cancel_check=req.cancel_check,
         )
@@ -197,6 +200,8 @@ def run_plan(req: RunRequest) -> RunResult:
             meta.update(req.meta_extra)
 
         archive = create_archive(output_root, plan, run_id=rid, meta=meta)
+        if req.on_run_start:
+            req.on_run_start(archive.run_id)
         last_archive = archive
         try:
             execute_plan(

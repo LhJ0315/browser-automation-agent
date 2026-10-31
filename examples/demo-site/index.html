@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>库存管理演示</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f5f7fb; color: #1f2937; }
+  header { background: #1e3a8a; color: #fff; padding: 18px 32px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 4px 0 0; font-size: 12px; opacity: .75; }
+  main { max-width: 920px; margin: 28px auto; padding: 0 24px; }
+  .panel { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 20px 24px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 18px; }
+  #search { flex: 1; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+  #searchBtn { padding: 10px 22px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font-size: 14px; cursor: pointer; }
+  #searchBtn:hover { background: #1d4ed8; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid #e5e7eb; }
+  th { color: #6b7280; font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.price { font-weight: 600; color: #111827; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+  .tag.ok { background: #dcfce7; color: #166534; }
+  .tag.out { background: #fee2e2; color: #991b1b; }
+  #status { margin-top: 16px; font-size: 13px; color: #6b7280; }
+  #status strong { color: #111827; }
+  .hint { margin-top: 6px; font-size: 12px; color: #9ca3af; }
+</style>
+</head>
+<body>
+<header>
+  <h1>库存管理演示</h1>
+  <p>本地演示页 · 用于 Browser Automation Agent 闭环任务</p>
+</header>
+<main>
+  <div class="panel">
+    <div class="toolbar">
+      <input id="search" type="text" placeholder="搜索商品名称，例如：机械键盘" autocomplete="off">
+      <button id="searchBtn" type="button">搜索</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>商品</th><th>SKU</th><th>单价</th><th>库存</th><th>状态</th></tr>
+      </thead>
+      <tbody id="rows">
+        <tr data-name="静音机械键盘 K87"><td>静音机械键盘 K87</td><td>KB-087</td><td class="price">¥399</td><td>12</td><td><span class="tag ok">在售</span></td></tr>
+        <tr data-name="无线鼠标 M3"><td>无线鼠标 M3</td><td>MS-003</td><td class="price">¥129</td><td>0</td><td><span class="tag out">缺货</span></td></tr>
+        <tr data-name="27 英寸显示器"><td>27 英寸显示器</td><td>MN-027</td><td class="price">¥1299</td><td>7</td><td><span class="tag ok">在售</span></td></tr>
+        <tr data-name="USB-C 扩展坞"><td>USB-C 扩展坞</td><td>DK-012</td><td class="price">¥259</td><td>34</td><td><span class="tag ok">在售</span></td></tr>
+        <tr data-name="降噪耳机"><td>降噪耳机</td><td>HP-021</td><td class="price">¥899</td><td>5</td><td><span class="tag ok">在售</span></td></tr>
+      </tbody>
+    </table>
+    <div id="status">共 <strong id="count">5</strong> 条商品</div>
+    <div class="hint">提示：搜索关键词后，表格只显示匹配的商品。</div>
+  </div>
+</main>
+<script>
+  const search = document.getElementById('search');
+  const rows = Array.from(document.querySelectorAll('#rows tr'));
+  const count = document.getElementById('count');
+  function applyFilter() {
+    const kw = search.value.trim().toLowerCase();
+    let visible = 0;
+    rows.forEach(row => {
+      const hit = !kw || row.dataset.name.toLowerCase().includes(kw);
+      row.style.display = hit ? '' : 'none';
+      if (hit) visible += 1;
+    });
+    count.textContent = String(visible);
+  }
+  document.getElementById('searchBtn').addEventListener('click', applyFilter);
+  search.addEventListener('input', applyFilter);
+</script>
+</body>
+</html>

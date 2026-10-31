@@ -180,7 +180,7 @@
 <script>
 /* ============ 基础 ============ */
 const $ = (sel, root=document) => root.querySelector(sel);
-const apiBase = () => localStorage.getItem('apiBase') || 'http://127.0.0.1:8001';
+const apiBase = () => localStorage.getItem('apiBase') || 'http://127.0.0.1:8000';
 
 async function api(path, opts={}) {
   const res = await fetch(apiBase() + path, {
@@ -366,7 +366,72 @@ let pollTimer = null;
 async function viewTaskDetail(id) {
   $('#page-title').textContent = '任务详情';
   $('#view').innerHTML = '<div class="card">加载中…</div>';
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+
+  let es = null;
+  let finished = false;
+  let sseBroken = false;
+
+  function closeStream() {
+    if (!es) return;
+    es.onerror = null;
+    try { es.close(); } catch (e) {}
+    if (window.__es === es) window.__es = null;
+    es = null;
+  }
+
+  function connectStream() {
+    if (es || sseBroken || finished) return;
+    const stream = new EventSource(apiBase() + '/api/v1/tasks/' + id + '/stream');
+    es = stream;
+    window.__es = stream;
+
+    stream.addEventListener('status', ev => {
+      if (stream !== es || window.__es !== stream) return;
+      let d;
+      try { d = JSON.parse(ev.data); } catch (e) { return; }
+      const el = $('#task-status');
+      if (el) el.innerHTML = '任务 ' + badge(d.status);
+      if (['succeeded','failed','cancelled'].includes(d.status)) {
+        finished = true;
+        closeStream();
+        render();
+      }
+    });
+
+    stream.addEventListener('step', ev => {
+      if (stream !== es || window.__es !== stream) return;
+      try {
+        const s = JSON.parse(ev.data);
+        const card = $('#trajectory-card');
+        if (card.classList.contains('hidden')) {
+          card.classList.remove('hidden');
+          $('#trajectory').innerHTML = '';
+        }
+        const html = renderStep(s);
+        const existing = $('#trajectory .tl-item[data-idx="' + s.index + '"]');
+        if (existing) existing.outerHTML = html;
+        else $('#trajectory').insertAdjacentHTML('beforeend', html);
+      } catch (e) {}
+    });
+
+    stream.addEventListener('done', () => {
+      if (stream !== es || window.__es !== stream) return;
+      finished = true;
+      closeStream();
+      render();
+    });
+
+    stream.onerror = () => {
+      // EventSource reconnects on its own; only fall back to polling if it stays down.
+      setTimeout(() => {
+        if (stream !== es || window.__es !== stream || stream.readyState === EventSource.OPEN) return;
+        sseBroken = true;
+        closeStream();
+        if (!finished) pollTimer = setTimeout(render, 2500);
+      }, 3000);
+    };
+  }
 
   async function render() {
     let t;
@@ -377,7 +442,7 @@ async function viewTaskDetail(id) {
     $('#view').innerHTML = `
       <div class="card">
         <div class="row" style="justify-content:space-between;align-items:center">
-          <h2 style="margin:0">任务 ${badge(t.status)}</h2>
+          <h2 style="margin:0" id="task-status">任务 ${badge(t.status)}</h2>
           <div class="row">
             <button class="btn small" id="btn-cancel" ${terminal?'disabled':''}>取消任务</button>
             <button class="btn small" onclick="history.back()">返回列表</button>
@@ -439,38 +504,19 @@ async function viewTaskDetail(id) {
       }
     } catch (e) { /* not an agent run */ }
 
-    if (!terminal) {
-      // SSE live stream: append steps as they arrive, re-render on status change
-      const es = new EventSource(apiBase() + '/api/v1/tasks/' + id + '/stream');
-      window.__es = es;
-      es.addEventListener('step', ev => {
-        try {
-          const s = JSON.parse(ev.data);
-          const card = $('#trajectory-card');
-          if (card.classList.contains('hidden')) {
-            card.classList.remove('hidden');
-            $('#trajectory').innerHTML = '';
-          }
-          $('#trajectory').insertAdjacentHTML('beforeend', renderStep(s));
-        } catch (e) {}
-      });
-      es.addEventListener('status', () => render());
-      es.addEventListener('done', ev => {
-        es.close();
-        render();
-      });
-      es.onerror = () => {
-        // fall back to polling if SSE fails (e.g. proxy)
-        if (es.readyState === EventSource.CLOSED) {
-          pollTimer = setTimeout(render, 2500);
-        }
-      };
+    if (terminal) {
+      finished = true;
+      closeStream();
+    } else if (sseBroken) {
+      pollTimer = setTimeout(render, 4000);
+    } else {
+      connectStream();
     }
   }
   function renderStep(s) {
     const okCls = s.ok ? 'ok' : 'bad';
     const [thought, result] = (s.message || '').split(' | ');
-    return `<div class="tl-item ${okCls}">
+    return `<div class="tl-item ${okCls}" data-idx="${s.index}">
       <div class="tl-head">
         <span class="tl-idx">#${(s.index+1)}</span>
         <span class="tl-act">${esc(s.action)}</span>

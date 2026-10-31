@@ -83,6 +83,8 @@ def _prompt(goal: str, history: list[dict], obs: dict, *, same_page: bool = Fals
     lines.append("Current page:")
     lines.append(f"URL: {obs.get('url')}")
     lines.append(f"Title: {obs.get('title')}")
+    lines.append("Visible page text (truncated, quote evidence from here):")
+    lines.append((obs.get("text") or "(empty)").strip() or "(empty)")
     if same_page:
         lines.append("Visible interactive elements: same as previous round (reuse @refs).")
     else:
@@ -120,22 +122,34 @@ def _parse_decision(raw: str) -> dict:
     m = re.search(r"\{[\s\S]*\}", text)
     if m:
         candidates.append(m.group(0))
+
+    def _loads(cand: str) -> dict:
+        # raw tabs/newlines copied from a table make the JSON invalid; they are
+        # safe to collapse to spaces because evidence matching ignores whitespace
+        cleaned = re.sub(r"[\x00-\x1f]", " ", cand)
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError:
+            data = json.loads(re.sub(r",\s*([}\]])", r"\1", cleaned))
+        if not isinstance(data, dict):
+            raise json.JSONDecodeError("decision is not an object", cleaned, 0)
+        return data
+
     for cand in candidates:
         try:
-            data = json.loads(cand)
-            if isinstance(data, dict):
-                return data
+            return _loads(cand)
         except json.JSONDecodeError:
             continue
-    # last-ditch: drop trailing commas before } or ] (common LLM slip)
-    cleaned = re.sub(r",\s*([}\]])", r"\1", candidates[-1])
-    try:
-        data = json.loads(cleaned)
-        if isinstance(data, dict):
-            return data
-    except json.JSONDecodeError:
-        pass
-    raise ValueError("agent LLM returned non-JSON decision")
+    raise ValueError(f"agent LLM returned non-JSON decision: {text[:160]!r}")
+
+
+def _result_summary(result: ActionResult) -> str:
+    summary = result.error or result.message
+    if result.ok and result.action == "extract":
+        value = str(result.data.get("value") or "").strip()
+        if value:
+            summary = f"{summary}: {value[:300]}"
+    return summary[:400]
 
 
 def run_agent_loop(
@@ -420,7 +434,7 @@ def run_agent_loop(
                 history.append({
                     "action": action_raw.get("action"),
                     "ok": result.ok,
-                    "summary": (result.error or result.message)[:120],
+                    "summary": _result_summary(result),
                 })
                 archive.add_step(StepRecord(
                     index=step_index,
